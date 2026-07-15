@@ -2,6 +2,8 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import QRCode from 'qrcode'
 import { SketchPicker } from 'react-color'
+import { DICTS, LANGS, detectLang } from './i18n'
+import type { Lang, Dict } from './i18n'
 import './App.css'
 
 /* ═══════════════════ types ═══════════════════ */
@@ -44,52 +46,16 @@ const DEFAULT_STYLE: StyleCfg = {
 
 type FormData = Record<string, string>
 
-const TYPE_META: Record<QRType, { title: string; desc: string; icon: ReactNode }> = {
-  website: {
-    title: 'Strona WWW',
-    desc: 'Otwórz stronę lub landing page',
-    icon: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.9 5.7 3.9 9S14.5 18.4 12 21c-2.5-2.6-3.9-5.7-3.9-9S9.5 5.6 12 3z" /></svg>,
-  },
-  text: {
-    title: 'Tekst',
-    desc: 'Dowolna wiadomość tekstowa',
-    icon: <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /></svg>,
-  },
-  wifi: {
-    title: 'Wi-Fi',
-    desc: 'Połącz z siecią bez wpisywania hasła',
-    icon: <svg viewBox="0 0 24 24"><path d="M2.5 9a15 15 0 0 1 19 0M5.5 12.5a10.5 10.5 0 0 1 13 0M8.5 16a6 6 0 0 1 7 0" /><circle cx="12" cy="19.4" r="1.4" fill="currentColor" stroke="none" /></svg>,
-  },
-  email: {
-    title: 'E-mail',
-    desc: 'Otwórz gotową wiadomość e-mail',
-    icon: <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3.5 6.5L12 13l8.5-6.5" /></svg>,
-  },
-  sms: {
-    title: 'SMS',
-    desc: 'Wyślij gotowego SMS-a',
-    icon: <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H4l2.2-3.3A8 8 0 1 1 21 12z" /><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" strokeLinecap="round" /></svg>,
-  },
-  phone: {
-    title: 'Telefon',
-    desc: 'Zadzwoń pod wskazany numer',
-    icon: <svg viewBox="0 0 24 24"><path d="M5 4h4l1.5 4.5-2.2 1.6a13 13 0 0 0 5.6 5.6l1.6-2.2L20 15v4a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z" /></svg>,
-  },
-  vcard: {
-    title: 'Wizytówka',
-    desc: 'Zapisz kontakt jednym skanem',
-    icon: <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8.5" cy="11" r="2" /><path d="M5.5 16c.5-1.6 1.7-2.4 3-2.4s2.5.8 3 2.4M14.5 10h4M14.5 13.5h4" /></svg>,
-  },
-  whatsapp: {
-    title: 'WhatsApp',
-    desc: 'Rozpocznij czat na WhatsApp',
-    icon: <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z" /><path d="M9 8.5c0 4 2.5 6.5 6.5 6.5l.9-1.8-2-1.2-1 .8a5.3 5.3 0 0 1-2.2-2.2l.8-1-1.2-2z" /></svg>,
-  },
-  location: {
-    title: 'Lokalizacja',
-    desc: 'Otwórz miejsce w mapach',
-    icon: <svg viewBox="0 0 24 24"><path d="M12 21s-7-5.8-7-11a7 7 0 0 1 14 0c0 5.2-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>,
-  },
+const TYPE_ICONS: Record<QRType, ReactNode> = {
+  website: <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" /><path d="M3 12h18M12 3c2.5 2.6 3.9 5.7 3.9 9S14.5 18.4 12 21c-2.5-2.6-3.9-5.7-3.9-9S9.5 5.6 12 3z" /></svg>,
+  text: <svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h10" /></svg>,
+  wifi: <svg viewBox="0 0 24 24"><path d="M2.5 9a15 15 0 0 1 19 0M5.5 12.5a10.5 10.5 0 0 1 13 0M8.5 16a6 6 0 0 1 7 0" /><circle cx="12" cy="19.4" r="1.4" fill="currentColor" stroke="none" /></svg>,
+  email: <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><path d="M3.5 6.5L12 13l8.5-6.5" /></svg>,
+  sms: <svg viewBox="0 0 24 24"><path d="M21 12a8 8 0 0 1-8 8H4l2.2-3.3A8 8 0 1 1 21 12z" /><path d="M8.5 12h.01M12 12h.01M15.5 12h.01" strokeLinecap="round" /></svg>,
+  phone: <svg viewBox="0 0 24 24"><path d="M5 4h4l1.5 4.5-2.2 1.6a13 13 0 0 0 5.6 5.6l1.6-2.2L20 15v4a2 2 0 0 1-2 2A15 15 0 0 1 3 6a2 2 0 0 1 2-2z" /></svg>,
+  vcard: <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2" /><circle cx="8.5" cy="11" r="2" /><path d="M5.5 16c.5-1.6 1.7-2.4 3-2.4s2.5.8 3 2.4M14.5 10h4M14.5 13.5h4" /></svg>,
+  whatsapp: <svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 0 0-7.8 13.5L3 21l4.6-1.2A9 9 0 1 0 12 3z" /><path d="M9 8.5c0 4 2.5 6.5 6.5 6.5l.9-1.8-2-1.2-1 .8a5.3 5.3 0 0 1-2.2-2.2l.8-1-1.2-2z" /></svg>,
+  location: <svg viewBox="0 0 24 24"><path d="M12 21s-7-5.8-7-11a7 7 0 0 1 14 0c0 5.2-7 11-7 11z" /><circle cx="12" cy="10" r="2.5" /></svg>,
 }
 
 const TYPE_ORDER: QRType[] = ['website', 'wifi', 'vcard', 'email', 'sms', 'phone', 'whatsapp', 'location', 'text']
@@ -350,75 +316,76 @@ function TextInput({ label, value, onChange, placeholder, required, max, type = 
 
 /* ═══════════════════ step 2 forms ═══════════════════ */
 
-function ContentForm({ type, data, set }: { type: QRType; data: FormData; set: (k: string, v: string) => void }) {
+function ContentForm({ type, data, set, t }: { type: QRType; data: FormData; set: (k: string, v: string) => void; t: Dict }) {
   const g = (k: string) => data[k] || ''
+  const f = t.forms
   switch (type) {
     case 'website': return (
-      <TextInput label="Adres strony" required value={g('url')} onChange={v => set('url', v)} placeholder="https://twojastrona.pl" type="url" />
+      <TextInput label={f.website.url} required value={g('url')} onChange={v => set('url', v)} placeholder={f.website.urlPh} type="url" />
     )
     case 'text': return (
       <div className="field">
-        <div className="label-row"><label>Tekst<span className="req"> *</span></label><span className="counter">{g('text').length}/500</span></div>
-        <textarea rows={5} value={g('text')} maxLength={500} onChange={e => set('text', e.target.value)} placeholder="Wpisz dowolną treść…" />
+        <div className="label-row"><label>{f.text.label}<span className="req"> *</span></label><span className="counter">{g('text').length}/500</span></div>
+        <textarea rows={5} value={g('text')} maxLength={500} onChange={e => set('text', e.target.value)} placeholder={f.text.ph} />
       </div>
     )
     case 'wifi': return (<>
-      <TextInput label="Nazwa sieci (SSID)" required value={g('ssid')} onChange={v => set('ssid', v)} placeholder="MojaSiec" />
-      <TextInput label="Hasło" value={g('password')} onChange={v => set('password', v)} placeholder="••••••••" />
+      <TextInput label={f.wifi.ssid} required value={g('ssid')} onChange={v => set('ssid', v)} placeholder={f.wifi.ssidPh} />
+      <TextInput label={f.wifi.pass} value={g('password')} onChange={v => set('password', v)} placeholder="••••••••" />
       <div className="field">
-        <label>Zabezpieczenie</label>
+        <label>{f.wifi.security}</label>
         <div className="seg">
-          {[['WPA', 'WPA/WPA2'], ['WEP', 'WEP'], ['nopass', 'Brak']].map(([v, l]) => (
+          {[['WPA', f.wifi.wpa], ['WEP', f.wifi.wep], ['nopass', f.wifi.none]].map(([v, l]) => (
             <button key={v} className={`seg-btn${(g('security') || 'WPA') === v ? ' on' : ''}`} onClick={() => set('security', v)}>{l}</button>
           ))}
         </div>
       </div>
     </>)
     case 'email': return (<>
-      <TextInput label="Adres e-mail odbiorcy" required value={g('to')} onChange={v => set('to', v)} placeholder="jan@przyklad.pl" type="email" />
-      <TextInput label="Temat" value={g('subject')} onChange={v => set('subject', v)} placeholder="Temat wiadomości" max={80} />
+      <TextInput label={f.email.to} required value={g('to')} onChange={v => set('to', v)} placeholder="jan@example.com" type="email" />
+      <TextInput label={f.email.subject} value={g('subject')} onChange={v => set('subject', v)} placeholder={f.email.subjectPh} max={80} />
       <div className="field">
-        <div className="label-row"><label>Treść</label><span className="counter">{g('body').length}/300</span></div>
-        <textarea rows={3} value={g('body')} maxLength={300} onChange={e => set('body', e.target.value)} placeholder="Treść wiadomości…" />
+        <div className="label-row"><label>{f.email.body}</label><span className="counter">{g('body').length}/300</span></div>
+        <textarea rows={3} value={g('body')} maxLength={300} onChange={e => set('body', e.target.value)} placeholder={f.email.bodyPh} />
       </div>
     </>)
     case 'sms': return (<>
-      <TextInput label="Numer telefonu" required value={g('number')} onChange={v => set('number', v)} placeholder="+48 600 000 000" type="tel" />
+      <TextInput label={f.sms.number} required value={g('number')} onChange={v => set('number', v)} placeholder="+48 600 000 000" type="tel" />
       <div className="field">
-        <div className="label-row"><label>Wiadomość</label><span className="counter">{g('message').length}/160</span></div>
-        <textarea rows={3} value={g('message')} maxLength={160} onChange={e => set('message', e.target.value)} placeholder="Treść SMS-a…" />
+        <div className="label-row"><label>{f.sms.message}</label><span className="counter">{g('message').length}/160</span></div>
+        <textarea rows={3} value={g('message')} maxLength={160} onChange={e => set('message', e.target.value)} placeholder={f.sms.messagePh} />
       </div>
     </>)
     case 'phone': return (
-      <TextInput label="Numer telefonu" required value={g('number')} onChange={v => set('number', v)} placeholder="+48 600 000 000" type="tel" />
+      <TextInput label={f.phone.number} required value={g('number')} onChange={v => set('number', v)} placeholder="+48 600 000 000" type="tel" />
     )
     case 'whatsapp': return (<>
-      <TextInput label="Numer telefonu" required value={g('number')} onChange={v => set('number', v)} placeholder="+48 600 000 000" type="tel" />
+      <TextInput label={f.whatsapp.number} required value={g('number')} onChange={v => set('number', v)} placeholder="+48 600 000 000" type="tel" />
       <div className="field">
-        <div className="label-row"><label>Wiadomość powitalna</label><span className="counter">{g('message').length}/200</span></div>
-        <textarea rows={3} value={g('message')} maxLength={200} onChange={e => set('message', e.target.value)} placeholder="Cześć! Piszę w sprawie…" />
+        <div className="label-row"><label>{f.whatsapp.message}</label><span className="counter">{g('message').length}/200</span></div>
+        <textarea rows={3} value={g('message')} maxLength={200} onChange={e => set('message', e.target.value)} placeholder={f.whatsapp.messagePh} />
       </div>
     </>)
     case 'location': return (<>
-      <TextInput label="Adres lub nazwa miejsca" value={g('query')} onChange={v => set('query', v)} placeholder="np. Rynek Główny, Kraków" />
-      <p className="hint">…albo podaj dokładne współrzędne:</p>
+      <TextInput label={f.location.query} value={g('query')} onChange={v => set('query', v)} placeholder={f.location.queryPh} />
+      <p className="hint">{f.location.or}</p>
       <div className="color-grid">
-        <TextInput label="Szerokość (lat)" value={g('lat')} onChange={v => set('lat', v)} placeholder="50.0617" />
-        <TextInput label="Długość (lng)" value={g('lng')} onChange={v => set('lng', v)} placeholder="19.9373" />
+        <TextInput label={f.location.lat} value={g('lat')} onChange={v => set('lat', v)} placeholder="50.0617" />
+        <TextInput label={f.location.lng} value={g('lng')} onChange={v => set('lng', v)} placeholder="19.9373" />
       </div>
     </>)
     case 'vcard': return (<>
       <div className="color-grid">
-        <TextInput label="Imię" required value={g('firstName')} onChange={v => set('firstName', v)} placeholder="Jan" />
-        <TextInput label="Nazwisko" value={g('lastName')} onChange={v => set('lastName', v)} placeholder="Kowalski" />
+        <TextInput label={f.vcard.first} required value={g('firstName')} onChange={v => set('firstName', v)} placeholder={f.vcard.firstPh} />
+        <TextInput label={f.vcard.last} value={g('lastName')} onChange={v => set('lastName', v)} placeholder={f.vcard.lastPh} />
       </div>
       <div className="color-grid">
-        <TextInput label="Firma" value={g('org')} onChange={v => set('org', v)} placeholder="Moja Firma" />
-        <TextInput label="Stanowisko" value={g('title')} onChange={v => set('title', v)} placeholder="CEO" />
+        <TextInput label={f.vcard.org} value={g('org')} onChange={v => set('org', v)} placeholder={f.vcard.orgPh} />
+        <TextInput label={f.vcard.title} value={g('title')} onChange={v => set('title', v)} placeholder="CEO" />
       </div>
-      <TextInput label="Telefon" value={g('phone')} onChange={v => set('phone', v)} placeholder="+48 600 000 000" type="tel" />
-      <TextInput label="E-mail" value={g('email')} onChange={v => set('email', v)} placeholder="jan@przyklad.pl" type="email" />
-      <TextInput label="Strona WWW" value={g('url')} onChange={v => set('url', v)} placeholder="https://…" type="url" />
+      <TextInput label={f.vcard.phone} value={g('phone')} onChange={v => set('phone', v)} placeholder="+48 600 000 000" type="tel" />
+      <TextInput label={f.vcard.email} value={g('email')} onChange={v => set('email', v)} placeholder="jan@example.com" type="email" />
+      <TextInput label={f.vcard.url} value={g('url')} onChange={v => set('url', v)} placeholder="https://…" type="url" />
     </>)
   }
 }
@@ -435,77 +402,37 @@ function HeroQR() {
   return <canvas ref={ref} />
 }
 
-const FEATURES = [
-  {
-    icon: '🎨', title: 'Pełna personalizacja',
-    desc: 'Zmieniaj kształty modułów i narożników, kolory oraz dodaj podpis pod kodem — wszystko z podglądem na żywo.',
-  },
-  {
-    icon: '🖼️', title: 'Własne logo',
-    desc: 'Wstaw logo firmy lub avatar w środek kodu. Korekcja błędów podnosi się automatycznie, aby kod pozostał czytelny.',
-  },
-  {
-    icon: '📦', title: '9 gotowych formatów',
-    desc: 'Strona WWW, Wi-Fi, wizytówka vCard, e-mail, SMS, telefon, WhatsApp, lokalizacja i dowolny tekst.',
-  },
-  {
-    icon: '⬇️', title: 'Eksport PNG i SVG',
-    desc: 'Pobierz kod w wysokiej rozdzielczości do 2048 px albo jako wektor SVG do druku. Możesz też skopiować go do schowka.',
-  },
-  {
-    icon: '🔒', title: 'Pełna prywatność',
-    desc: 'Kody generowane są w całości w Twojej przeglądarce. Żadne dane nie opuszczają Twojego komputera.',
-  },
-  {
-    icon: '⚡', title: 'Bez rejestracji',
-    desc: 'Zero kont, zero limitów, zero znaków wodnych. Otwierasz, tworzysz, pobierasz.',
-  },
-]
-
-const FAQ = [
-  {
-    q: 'Czy wygenerowane kody QR wygasają?',
-    a: 'Nie. Kody są statyczne — dane zapisane są bezpośrednio w kodzie, więc działają bezterminowo i nie zależą od żadnego serwera.',
-  },
-  {
-    q: 'Czy mogę używać kodów komercyjnie?',
-    a: 'Tak, wygenerowane kody możesz wykorzystywać bez ograniczeń — na wizytówkach, plakatach, opakowaniach czy w menu restauracji.',
-  },
-  {
-    q: 'Jak działa kod Wi-Fi?',
-    a: 'Po zeskanowaniu telefon proponuje automatyczne połączenie z siecią — gość nie musi przepisywać hasła.',
-  },
-  {
-    q: 'Który format pobrania wybrać?',
-    a: 'PNG sprawdzi się w internecie i dokumentach. SVG to wektor — wybierz go do druku w dużym formacie, nigdy nie traci jakości.',
-  },
-  {
-    q: 'Czy kolorowy kod QR zawsze zadziała?',
-    a: 'Zadbaj o kontrast: ciemny kod na jasnym tle. Po zmianie kolorów zeskanuj podgląd telefonem, aby mieć pewność.',
-  },
-]
-
-function Landing({ onStart }: { onStart: () => void }) {
+function Landing({ onStart, t }: { onStart: () => void; t: Dict }) {
   const [openFaq, setOpenFaq] = useState<number | null>(0)
+  const L = t.landing
+  const features = [
+    { icon: '🎨', title: L.f1t, desc: L.f1d },
+    { icon: '🖼️', title: L.f2t, desc: L.f2d },
+    { icon: '📦', title: L.f3t, desc: L.f3d },
+    { icon: '⬇️', title: L.f4t, desc: L.f4d },
+    { icon: '🔒', title: L.f5t, desc: L.f5d },
+    { icon: '⚡', title: L.f6t, desc: L.f6d },
+  ]
+  const faq = [
+    { q: L.faq1q, a: L.faq1a }, { q: L.faq2q, a: L.faq2a }, { q: L.faq3q, a: L.faq3a },
+    { q: L.faq4q, a: L.faq4a }, { q: L.faq5q, a: L.faq5a },
+  ]
   return (
     <div className="landing">
       {/* hero */}
       <section className="hero">
         <div className="hero-copy">
-          <span className="hero-badge">Darmowy · bez rejestracji · offline</span>
-          <h1>Stwórz kod QR w kilka sekund</h1>
-          <p>
-            Trzy proste kroki od pomysłu do gotowego kodu: wybierz format,
-            wpisz dane i dopasuj wygląd do swojej marki.
-          </p>
+          <span className="hero-badge">{L.badge}</span>
+          <h1>{L.h1}</h1>
+          <p>{L.sub}</p>
           <div className="hero-cta">
-            <button className="dl-main hero-btn" onClick={onStart}>Utwórz kod QR</button>
-            <a className="ghost-btn hero-ghost" href="#cennik">Zobacz cennik</a>
+            <button className="dl-main hero-btn" onClick={onStart}>{L.ctaMain}</button>
+            <a className="ghost-btn hero-ghost" href="#cennik">{L.ctaGhost}</a>
           </div>
           <ul className="hero-points">
-            <li>✓ 9 formatów danych</li>
-            <li>✓ Eksport PNG / SVG</li>
-            <li>✓ Własne logo i kolory</li>
+            <li>✓ {L.p1}</li>
+            <li>✓ {L.p2}</li>
+            <li>✓ {L.p3}</li>
           </ul>
         </div>
         <div className="hero-visual">
@@ -516,13 +443,13 @@ function Landing({ onStart }: { onStart: () => void }) {
 
       {/* how it works */}
       <section className="how" id="jak">
-        <h2>Trzy kroki do gotowego kodu</h2>
-        <p className="section-sub">Od wyboru do pobrania — przejrzyście na każdym etapie.</p>
+        <h2>{L.howTitle}</h2>
+        <p className="section-sub">{L.howSub}</p>
         <div className="how-grid">
           {[
-            { n: '1', t: 'Wybierz typ kodu', d: 'Strona, Wi-Fi, wizytówka, e-mail, SMS i więcej — każdy format ma gotowy formularz.' },
-            { n: '2', t: 'Wprowadź dane', d: 'Uzupełnij pola i obserwuj podgląd kodu aktualizujący się na żywo.' },
-            { n: '3', t: 'Dostosuj i pobierz', d: 'Kolory, kształty, logo i podpis. Pobierz PNG w wysokiej jakości lub wektor SVG.' },
+            { n: '1', t: L.how1t, d: L.how1d },
+            { n: '2', t: L.how2t, d: L.how2d },
+            { n: '3', t: L.how3t, d: L.how3d },
           ].map(s => (
             <div className="how-card" key={s.n}>
               <span className="how-num">{s.n}</span>
@@ -535,10 +462,10 @@ function Landing({ onStart }: { onStart: () => void }) {
 
       {/* features */}
       <section className="features" id="funkcje">
-        <h2>Wszystko, czego potrzebujesz</h2>
-        <p className="section-sub">Kompletny generator — bez kont, limitów i znaków wodnych.</p>
+        <h2>{L.featTitle}</h2>
+        <p className="section-sub">{L.featSub}</p>
         <div className="feature-grid">
-          {FEATURES.map(f => (
+          {features.map(f => (
             <div className="feature-card" key={f.title}>
               <span className="feature-icon" aria-hidden="true">{f.icon}</span>
               <h3>{f.title}</h3>
@@ -550,53 +477,53 @@ function Landing({ onStart }: { onStart: () => void }) {
 
       {/* pricing */}
       <section className="pricing" id="cennik">
-        <h2>Cennik</h2>
-        <p className="section-sub">Prosty jak sama aplikacja.</p>
+        <h2>{L.priceTitle}</h2>
+        <p className="section-sub">{L.priceSub}</p>
         <div className="price-grid">
           <div className="price-card">
-            <span className="price-name">Osobisty</span>
-            <div className="price-value">0 zł<span> / na zawsze</span></div>
+            <span className="price-name">{L.planPersonal}</span>
+            <div className="price-value">0<span> {L.perForever}</span></div>
             <ul>
-              <li>✓ Wszystkie 9 formatów</li>
-              <li>✓ Pełna personalizacja</li>
-              <li>✓ Eksport PNG i SVG</li>
-              <li>✓ Bez limitów i rejestracji</li>
+              <li>✓ {L.pp1}</li>
+              <li>✓ {L.pp2}</li>
+              <li>✓ {L.pp3}</li>
+              <li>✓ {L.pp4}</li>
             </ul>
-            <button className="dl-main price-btn" onClick={onStart}>Zacznij teraz</button>
+            <button className="dl-main price-btn" onClick={onStart}>{L.startNow}</button>
           </div>
           <div className="price-card featured">
-            <span className="price-tag">Najpopularniejszy</span>
-            <span className="price-name">Hobby</span>
-            <div className="price-value">0 zł<span> / miesiąc</span></div>
+            <span className="price-tag">{L.popular}</span>
+            <span className="price-name">{L.planHobby}</span>
+            <div className="price-value">0<span> {L.perMonth}</span></div>
             <ul>
-              <li>✓ Wszystko z planu Osobisty</li>
-              <li>✓ Własne logo w kodzie</li>
-              <li>✓ Rozdzielczość do 2048 px</li>
-              <li>✓ Kopiowanie do schowka</li>
+              <li>✓ {L.ph1}</li>
+              <li>✓ {L.ph2}</li>
+              <li>✓ {L.ph3}</li>
+              <li>✓ {L.ph4}</li>
             </ul>
-            <button className="dl-main price-btn" onClick={onStart}>Zacznij teraz</button>
+            <button className="dl-main price-btn" onClick={onStart}>{L.startNow}</button>
           </div>
           <div className="price-card">
-            <span className="price-name">Pro (żartujemy)</span>
-            <div className="price-value">0 zł<span> / rok</span></div>
+            <span className="price-name">{L.planPro}</span>
+            <div className="price-value">0<span> {L.perYear}</span></div>
             <ul>
-              <li>✓ Wszystko z planu Hobby</li>
-              <li>✓ Kod działa bezterminowo</li>
-              <li>✓ 100% prywatności — offline</li>
-              <li>✓ Dobre samopoczucie gratis</li>
+              <li>✓ {L.pr1}</li>
+              <li>✓ {L.pr2}</li>
+              <li>✓ {L.pr3}</li>
+              <li>✓ {L.pr4}</li>
             </ul>
-            <button className="dl-main price-btn" onClick={onStart}>Zacznij teraz</button>
+            <button className="dl-main price-btn" onClick={onStart}>{L.startNow}</button>
           </div>
         </div>
-        <p className="price-note">Aplikacja do użytku własnego — wszystkie funkcje są i pozostaną darmowe.</p>
+        <p className="price-note">{L.priceNote}</p>
       </section>
 
       {/* FAQ */}
       <section className="faq" id="faq">
-        <h2>Częste pytania</h2>
+        <h2>{L.faqTitle}</h2>
         <div className="faq-list">
-          {FAQ.map((f, i) => (
-            <div className={`faq-item${openFaq === i ? ' open' : ''}`} key={f.q}>
+          {faq.map((f, i) => (
+            <div className={`faq-item${openFaq === i ? ' open' : ''}`} key={i}>
               <button className="faq-q" onClick={() => setOpenFaq(openFaq === i ? null : i)} aria-expanded={openFaq === i}>
                 {f.q}
                 <svg className="chevron" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true">
@@ -611,14 +538,48 @@ function Landing({ onStart }: { onStart: () => void }) {
 
       {/* bottom CTA */}
       <section className="bottom-cta">
-        <h2>Gotowy na swój pierwszy kod?</h2>
-        <button className="dl-main hero-btn" onClick={onStart}>Utwórz kod QR</button>
+        <h2>{L.bottomTitle}</h2>
+        <button className="dl-main hero-btn" onClick={onStart}>{L.ctaMain}</button>
       </section>
 
       <footer className="site-footer">
-        <span>QR Studio — generator kodów QR do użytku własnego</span>
-        <span>Działa w 100% w Twojej przeglądarce</span>
+        <span>{L.footer1}</span>
+        <span>{L.footer2}</span>
       </footer>
+    </div>
+  )
+}
+
+/* ═══════════════════ language switcher ═══════════════════ */
+
+function LangSwitcher({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const h = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false) }
+    document.addEventListener('mousedown', h)
+    return () => document.removeEventListener('mousedown', h)
+  }, [])
+  const current = LANGS.find(l => l.code === lang)!
+  return (
+    <div className="lang" ref={ref}>
+      <button className="lang-btn" onClick={() => setOpen(o => !o)} aria-label="Language" aria-expanded={open}>
+        <span className="lang-flag">{current.flag}</span>
+        <span className="lang-code">{current.code.toUpperCase()}</span>
+        <svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true">
+          <path d="M4 6l4 4 4-4" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </button>
+      {open && (
+        <div className="lang-menu">
+          {LANGS.map(l => (
+            <button key={l.code} className={`lang-item${l.code === lang ? ' on' : ''}`}
+              onClick={() => { setLang(l.code); setOpen(false) }}>
+              <span className="lang-flag">{l.flag}</span> {l.name}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
@@ -626,6 +587,15 @@ function Landing({ onStart }: { onStart: () => void }) {
 /* ═══════════════════ app ═══════════════════ */
 
 export default function App() {
+  const [lang, setLangState] = useState<Lang>(detectLang)
+  const t = DICTS[lang]
+  const setLang = useCallback((l: Lang) => {
+    setLangState(l)
+    try { localStorage.setItem('qr-lang', l) } catch { /* ignore */ }
+    document.documentElement.lang = l
+  }, [])
+  useEffect(() => { document.documentElement.lang = lang }, [lang])
+
   const [page, setPage] = useState<'home' | 'studio'>('home')
   const [step, setStep] = useState(1)
   const [qrType, setQrType] = useState<QRType | null>(null)
@@ -718,10 +688,8 @@ export default function App() {
     })
   }
 
-  const meta = qrType ? TYPE_META[qrType] : null
-
   const brand = (
-    <button className="brand" onClick={() => setPage('home')} aria-label="Strona główna">
+    <button className="brand" onClick={() => setPage('home')} aria-label={t.brandHome}>
       <div className="brand-icon" aria-hidden="true">
         <svg viewBox="0 0 20 20" width="18" height="18">
           <rect x="1" y="1" width="8" height="8" rx="1.5" fill="none" stroke="currentColor" strokeWidth="2" />
@@ -744,15 +712,18 @@ export default function App() {
       <div className="app">
         <header className="steps home-nav">
           {brand}
-          <nav className="nav-links" aria-label="Nawigacja">
-            <a href="#jak">Jak to działa</a>
-            <a href="#funkcje">Funkcje</a>
-            <a href="#cennik">Cennik</a>
-            <a href="#faq">FAQ</a>
+          <nav className="nav-links" aria-label="Nav">
+            <a href="#jak">{t.nav.how}</a>
+            <a href="#funkcje">{t.nav.features}</a>
+            <a href="#cennik">{t.nav.pricing}</a>
+            <a href="#faq">{t.nav.faq}</a>
           </nav>
-          <button className="dl-main nav-cta" onClick={() => setPage('studio')}>Utwórz kod QR</button>
+          <div className="nav-actions">
+            <LangSwitcher lang={lang} setLang={setLang} />
+            <button className="dl-main nav-cta" onClick={() => setPage('studio')}>{t.nav.cta}</button>
+          </div>
         </header>
-        <Landing onStart={() => { setPage('studio'); window.scrollTo(0, 0) }} />
+        <Landing t={t} onStart={() => { setPage('studio'); window.scrollTo(0, 0) }} />
       </div>
     )
   }
@@ -762,11 +733,11 @@ export default function App() {
       {/* ═══ steps bar ═══ */}
       <header className="steps">
         {brand}
-        <nav className="crumbs" aria-label="Kroki">
+        <nav className="crumbs" aria-label="Steps">
           {[
-            { n: 1, l: 'Wybierz typ' },
-            { n: 2, l: 'Wprowadź dane' },
-            { n: 3, l: 'Dostosuj i pobierz' },
+            { n: 1, l: t.steps.s1 },
+            { n: 2, l: t.steps.s2 },
+            { n: 3, l: t.steps.s3 },
           ].map(({ n, l }, i) => (
             <span key={n} style={{ display: 'contents' }}>
               {i > 0 && <span className="crumb-sep" aria-hidden="true">›</span>}
@@ -780,21 +751,22 @@ export default function App() {
             </span>
           ))}
         </nav>
+        <LangSwitcher lang={lang} setLang={setLang} />
       </header>
 
       {/* ═══ STEP 1: choose type ═══ */}
       {step === 1 && (
         <main className="step1">
           <div className="step1-head">
-            <h1>Jaki kod QR chcesz utworzyć?</h1>
-            <p>Wybierz typ — w następnym kroku uzupełnisz dane, a na końcu dopasujesz wygląd.</p>
+            <h1>{t.step1.title}</h1>
+            <p>{t.step1.sub}</p>
           </div>
           <div className="type-grid">
-            {TYPE_ORDER.map(t => (
-              <button key={t} className={`type-card${qrType === t ? ' on' : ''}`} onClick={() => pickType(t)}>
-                <span className="type-icon">{TYPE_META[t].icon}</span>
-                <span className="type-title">{TYPE_META[t].title}</span>
-                <span className="type-desc">{TYPE_META[t].desc}</span>
+            {TYPE_ORDER.map(qt => (
+              <button key={qt} className={`type-card${qrType === qt ? ' on' : ''}`} onClick={() => pickType(qt)}>
+                <span className="type-icon">{TYPE_ICONS[qt]}</span>
+                <span className="type-title">{t.types[qt].title}</span>
+                <span className="type-desc">{t.types[qt].desc}</span>
               </button>
             ))}
           </div>
@@ -802,37 +774,37 @@ export default function App() {
       )}
 
       {/* ═══ STEP 2: content ═══ */}
-      {step === 2 && meta && qrType && (
+      {step === 2 && qrType && (
         <main className="step2">
           <div className="content-card">
             <div className="content-head">
-              <span className="section-icon big">{meta.icon}</span>
+              <span className="section-icon big">{TYPE_ICONS[qrType]}</span>
               <div>
-                <h2>{meta.title}</h2>
-                <p>{meta.desc}</p>
+                <h2>{t.types[qrType].title}</h2>
+                <p>{t.types[qrType].desc}</p>
               </div>
             </div>
             <div className="content-form">
-              <ContentForm type={qrType} data={form} set={setField} />
+              <ContentForm type={qrType} data={form} set={setField} t={t} />
             </div>
           </div>
           <aside className="side-preview">
             {canProceed ? (
               <>
                 <div className="mini-frame"><canvas ref={canvasRef} /></div>
-                <p className="hint center">Podgląd na żywo</p>
+                <p className="hint center">{t.step2.livePreview}</p>
               </>
             ) : (
               <div className="side-empty">
-                <span className="section-icon big">{meta.icon}</span>
-                <p>Uzupełnij wymagane pola, aby zobaczyć podgląd kodu.</p>
+                <span className="section-icon big">{TYPE_ICONS[qrType]}</span>
+                <p>{t.step2.fillPrompt}</p>
               </div>
             )}
           </aside>
           <footer className="wizard-footer">
-            <button className="ghost-btn back" onClick={() => setStep(1)}>‹ Wstecz</button>
+            <button className="ghost-btn back" onClick={() => setStep(1)}>{t.step2.back}</button>
             <button className="dl-main next" disabled={!canProceed} onClick={() => setStep(3)}>
-              Dalej ›
+              {t.step2.next}
             </button>
           </footer>
         </main>
@@ -844,9 +816,9 @@ export default function App() {
           <div className="col-left">
             <Section
               icon={<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M12 2a4 4 0 0 1 4 4 4 4 0 0 1 4 4 4 4 0 0 1-4 4 4 4 0 0 1-4 4 4 4 0 0 1-4-4 4 4 0 0 1-4-4 4 4 0 0 1 4-4 4 4 0 0 1 4-4z" /></svg>}
-              title="Modyfikacja" desc="Kształty, kolory i tekst kodu QR" defaultOpen>
+              title={t.step3.modTitle} desc={t.step3.modDesc} defaultOpen>
               <div className="field">
-                <label>Styl modułów</label>
+                <label>{t.step3.moduleStyle}</label>
                 <div className="tiles">
                   {(['square', 'rounded', 'dots', 'diamond', 'classy'] as DotStyle[]).map(st => (
                     <button key={st} className={`tile${cfg.dotStyle === st ? ' on' : ''}`}
@@ -857,70 +829,70 @@ export default function App() {
                 </div>
               </div>
               <div className="field">
-                <label>Kształt narożników</label>
+                <label>{t.step3.cornerShape}</label>
                 <div className="tiles">
                   {(['square', 'rounded', 'circle', 'leaf'] as CornerStyle[]).map(st => (
                     <button key={st} className={`tile${cfg.cornerStyle === st ? ' on' : ''}`}
-                      onClick={() => setStyle({ cornerStyle: st })} aria-label={`Narożnik: ${st}`}>
+                      onClick={() => setStyle({ cornerStyle: st })} aria-label={st}>
                       <CornerThumb style={st} />
                     </button>
                   ))}
                 </div>
               </div>
               <div className="color-grid">
-                <ColorField label="Kod QR" value={cfg.fgColor} onChange={v => setStyle({ fgColor: v })} />
-                <ColorField label="Tło" value={cfg.bgColor} onChange={v => setStyle({ bgColor: v })} />
+                <ColorField label={t.step3.qrColor} value={cfg.fgColor} onChange={v => setStyle({ fgColor: v })} />
+                <ColorField label={t.step3.bgColor} value={cfg.bgColor} onChange={v => setStyle({ bgColor: v })} />
               </div>
               <div className="field">
                 <div className="label-row">
-                  <label>Tekst pod kodem</label>
+                  <label>{t.step3.labelText}</label>
                   <span className="counter">{cfg.label.length}/20</span>
                 </div>
                 <input type="text" value={cfg.label} maxLength={20}
-                  onChange={e => setStyle({ label: e.target.value })} placeholder="np. Scan me!" />
+                  onChange={e => setStyle({ label: e.target.value })} placeholder={t.step3.labelPh} />
               </div>
               {cfg.label && (
-                <ColorField label="Kolor tekstu" value={cfg.labelColor} onChange={v => setStyle({ labelColor: v })} />
+                <ColorField label={t.step3.labelColor} value={cfg.labelColor} onChange={v => setStyle({ labelColor: v })} />
               )}
             </Section>
 
             <Section
               icon={<svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="3" /><circle cx="9" cy="9" r="2" /><path d="M4 17l5-5 4 4 3-3 4 4" /></svg>}
-              title="Logo" desc="Umieść własne logo w środku kodu QR">
+              title={t.step3.logoTitle} desc={t.step3.logoDesc}>
               <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/svg+xml"
                 hidden onChange={e => onLogoFile(e.target.files?.[0])} />
               {cfg.logo ? (
                 <div className="logo-loaded">
                   <img src={cfg.logo} alt="Logo" />
                   <div className="logo-actions">
-                    <button className="ghost-btn" onClick={() => fileRef.current?.click()}>Zmień</button>
-                    <button className="ghost-btn danger" onClick={() => setStyle({ logo: null })}>Usuń</button>
+                    <button className="ghost-btn" onClick={() => fileRef.current?.click()}>{t.step3.change}</button>
+                    <button className="ghost-btn danger" onClick={() => setStyle({ logo: null })}>{t.step3.remove}</button>
                   </div>
                 </div>
               ) : (
                 <button className="dropzone" onClick={() => fileRef.current?.click()}>
-                  <strong>Kliknij, aby przesłać logo</strong>
-                  <span>PNG, JPG lub SVG · maks. 5 MB</span>
+                  <strong>{t.step3.logoUpload}</strong>
+                  <span>{t.step3.logoHint}</span>
                 </button>
               )}
               {cfg.logo && (
                 <div className="field">
                   <div className="label-row">
-                    <label>Skala logo</label>
+                    <label>{t.step3.logoScale}</label>
                     <span className="counter">{Math.round(cfg.logoScale * 100)}%</span>
                   </div>
                   <input type="range" min={0.12} max={0.3} step={0.01} value={cfg.logoScale}
                     onChange={e => setStyle({ logoScale: +e.target.value })} />
-                  <p className="hint">Przy logo korekcja błędów została podniesiona do H.</p>
+                  <p className="hint">{t.step3.logoNote}</p>
                 </div>
               )}
             </Section>
 
             <Section
               icon={<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" /><path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.5-2.4 1a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.6a7 7 0 0 0-2 1.2l-2.4-1-2 3.5 2 1.5a7 7 0 0 0 0 2.4l-2 1.5 2 3.5 2.4-1a7 7 0 0 0 2 1.2L10 21h4l.5-2.6a7 7 0 0 0 2-1.2l2.4 1 2-3.5-2-1.5c.06-.4.1-.8.1-1.2z" /></svg>}
-              title="Parametry" desc="Korekcja błędów, marginesy i rozmiar pliku">
+              title={t.step3.paramsTitle} desc={t.step3.paramsDesc}>
               <div className="field">
-                <label>Korekcja błędów</label>
+                <label>{t.step3.errorLevel}</label>
                 <div className="seg">
                   {(['L', 'M', 'Q', 'H'] as ErrLevel[]).map(l => (
                     <button key={l} className={`seg-btn${cfg.errorLevel === l ? ' on' : ''}`}
@@ -928,19 +900,19 @@ export default function App() {
                   ))}
                 </div>
                 <p className="hint">
-                  {cfg.errorLevel === 'L' && 'Niski (7%) — najmniejszy kod'}
-                  {cfg.errorLevel === 'M' && 'Średni (15%) — zalecany na co dzień'}
-                  {cfg.errorLevel === 'Q' && 'Wysoki (25%) — dobre pod logo'}
-                  {cfg.errorLevel === 'H' && 'Maksymalny (30%) — wymagany przy logo'}
+                  {cfg.errorLevel === 'L' && t.step3.errL}
+                  {cfg.errorLevel === 'M' && t.step3.errM}
+                  {cfg.errorLevel === 'Q' && t.step3.errQ}
+                  {cfg.errorLevel === 'H' && t.step3.errH}
                 </p>
               </div>
               <div className="field">
-                <div className="label-row"><label>Marginesy</label><span className="counter">{cfg.margin}</span></div>
+                <div className="label-row"><label>{t.step3.margin}</label><span className="counter">{cfg.margin}</span></div>
                 <input type="range" min={0} max={8} value={cfg.margin}
                   onChange={e => setStyle({ margin: +e.target.value })} />
               </div>
               <div className="field">
-                <div className="label-row"><label>Rozmiar eksportu</label><span className="counter">{cfg.size} px</span></div>
+                <div className="label-row"><label>{t.step3.exportSize}</label><span className="counter">{cfg.size} px</span></div>
                 <input type="range" min={256} max={2048} step={64} value={cfg.size}
                   onChange={e => setStyle({ size: +e.target.value })} />
               </div>
@@ -956,8 +928,8 @@ export default function App() {
             <div className="tip-card">
               <div className="tip-bulb" aria-hidden="true">💡</div>
               <div>
-                <strong>Czy wiesz, że?</strong>
-                <p>Kody QR z kolorem, logo lub własnym kształtem są skanowane <b>częściej</b> niż zwykłe czarno-białe. Wyróżnij swój.</p>
+                <strong>{t.step3.tipTitle}</strong>
+                <p>{t.step3.tipBefore} <b>{t.step3.tipBold}</b> {t.step3.tipAfter}</p>
               </div>
             </div>
 
@@ -966,14 +938,14 @@ export default function App() {
                 <svg viewBox="0 0 20 20" width="18" height="18" aria-hidden="true">
                   <path d="M10 3v9m0 0l-3.5-3.5M10 12l3.5-3.5M3.5 16.5h13" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
-                Pobierz kod QR
+                {t.step3.download}
               </button>
               <div className="dl-secondary">
                 <button className="ghost-btn" onClick={downloadSvg}>SVG</button>
-                <button className="ghost-btn" onClick={copy}>{copied ? '✓ Skopiowano' : 'Kopiuj'}</button>
-                <button className="ghost-btn" onClick={() => setCfg(DEFAULT_STYLE)}>Reset stylu</button>
+                <button className="ghost-btn" onClick={copy}>{copied ? t.step3.copied : t.step3.copy}</button>
+                <button className="ghost-btn" onClick={() => setCfg(DEFAULT_STYLE)}>{t.step3.resetStyle}</button>
               </div>
-              <button className="ghost-btn back-link" onClick={() => setStep(2)}>‹ Wróć do danych</button>
+              <button className="ghost-btn back-link" onClick={() => setStep(2)}>{t.step3.backToData}</button>
             </div>
           </div>
         </main>
