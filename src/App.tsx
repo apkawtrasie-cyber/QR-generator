@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import type { ReactNode } from 'react'
 import QRCode from 'qrcode'
 import { SketchPicker } from 'react-color'
-import { DICTS, LANGS, detectLang } from './i18n'
+import { DICTS, LANGS, detectLang, langFromPath } from './i18n'
 import type { Lang, Dict } from './i18n'
 import './App.css'
 
@@ -589,12 +589,36 @@ function LangSwitcher({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => voi
 export default function App() {
   const [lang, setLangState] = useState<Lang>(detectLang)
   const t = DICTS[lang]
+
   const setLang = useCallback((l: Lang) => {
     setLangState(l)
     try { localStorage.setItem('qr-lang', l) } catch { /* ignore */ }
     document.documentElement.lang = l
+    // reflect the language in a friendly URL: /de, /fr, …
+    const rest = location.pathname.replace(/^\/([a-z]{2})(?=\/|$)/, '')
+    const next = `/${l}${rest}` + location.search + location.hash
+    if (next !== location.pathname + location.search + location.hash) {
+      history.pushState({}, '', next)
+    }
   }, [])
-  useEffect(() => { document.documentElement.lang = lang }, [lang])
+
+  // on first load, if no language prefix is in the URL, add one
+  useEffect(() => {
+    document.documentElement.lang = lang
+    if (!langFromPath()) {
+      history.replaceState({}, '', `/${lang}${location.search}${location.hash}`)
+    }
+  }, [lang])
+
+  // keep language in sync with browser back/forward navigation
+  useEffect(() => {
+    const onPop = () => {
+      const l = langFromPath()
+      if (l) setLangState(l)
+    }
+    window.addEventListener('popstate', onPop)
+    return () => window.removeEventListener('popstate', onPop)
+  }, [])
 
   const [page, setPage] = useState<'home' | 'studio'>('home')
   const [step, setStep] = useState(1)

@@ -668,7 +668,17 @@ const cs: Dict = {
 
 export const DICTS: Record<Lang, Dict> = { pl, en, de, fr, it, sk, cs }
 
+/** Language from the URL path prefix, e.g. "/de" or "/fr/…". */
+export function langFromPath(): Lang | null {
+  if (typeof location === 'undefined') return null
+  const seg = location.pathname.split('/')[1]?.toLowerCase()
+  return seg && (DICTS as Record<string, Dict>)[seg] ? (seg as Lang) : null
+}
+
+/** Initial language: URL prefix → saved choice → browser → Polish. */
 export function detectLang(): Lang {
+  const fromUrl = langFromPath()
+  if (fromUrl) return fromUrl
   const saved = (typeof localStorage !== 'undefined' && localStorage.getItem('qr-lang')) as Lang | null
   if (saved && DICTS[saved]) return saved
   const nav = typeof navigator !== 'undefined' ? navigator.language.slice(0, 2).toLowerCase() : 'pl'
